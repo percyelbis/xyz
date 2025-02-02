@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de Coordenadas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        
+        .input-group h3 {
+            margin-top: 0;
+            color: #34495e;
+        }
+        
+        .coord-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 80px;
+        }
+        
+        select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        
+        .results h3 {
+            margin-top: 0;
+            color: #34495e;
+        }
+        
+        .result-item {
+            margin-bottom: 15px;
+        }
+        
+        .result-item h4 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        
+        .error {
+            color: #e74c3c;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #fadbd8;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Conversor de Coordenadas Geodésicas</h1>
+        
+        <div class="error" id="error-message"></div>
+        
+        <div class="input-group">
+            <h3>Latitud</h3>
+            <div class="coord-input">
+                <input type="number" id="lat-deg" placeholder="Grados" min="0" max="90">
+                <input type="number" id="lat-min" placeholder="Minutos" min="0" max="59">
+                <input type="number" id="lat-sec" placeholder="Segundos" min="0" max="59" step="0.0001">
+                <select id="lat-dir">
+                    <option value="N">Norte (N)</option>
+                    <option value="S">Sur (S)</option>
+                </select>
+            </div>
+            
+            <h3>Longitud</h3>
+            <div class="coord-input">
+                <input type="number" id="lon-deg" placeholder="Grados" min="0" max="180">
+                <input type="number" id="lon-min" placeholder="Minutos" min="0" max="59">
+                <input type="number" id="lon-sec" placeholder="Segundos" min="0" max="59" step="0.0001">
+                <select id="lon-dir">
+                    <option value="E">Este (E)</option>
+                    <option value="W">Oeste (W)</option>
+                </select>
+            </div>
+            
+            <h3>Altura Elipsoidal</h3>
+            <div class="coord-input">
+                <input type="number" id="height" placeholder="Metros" step="0.01">
+            </div>
+        </div>
+        
+        <button onclick="convertCoordinates()">Convertir Coordenadas</button>
+        
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        function gmsToDecimal(deg, min, sec, dir) {
+            let decimal = parseFloat(deg) + parseFloat(min)/60 + parseFloat(sec)/3600;
+            if (dir === 'S' || dir === 'W') {
+                decimal = -decimal;
+            }
+            return decimal;
+        }
+
+        function decimalToGMS(decimal) {
+            const sign = decimal < 0 ? -1 : 1;
+            decimal = Math.abs(decimal);
+            const degrees = Math.floor(decimal);
+            const minutesDecimal = (decimal - degrees) * 60;
+            const minutes = Math.floor(minutesDecimal);
+            const seconds = ((minutesDecimal - minutes) * 60).toFixed(5);
+            return {
+                deg: degrees,
+                min: minutes,
+                sec: seconds,
+                sign: sign
+            };
+        }
+
+        function validateInput(value, type) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.style.display = 'none';
+            
+            try {
+                if (type === 'lat') {
+                    const deg = parseFloat(document.getElementById('lat-deg').value);
+                    const min = parseFloat(document.getElementById('lat-min').value);
+                    const sec = parseFloat(document.getElementById('lat-sec').value);
+                    
+                    if (deg < 0 || deg > 90 || min < 0 || min >= 60 || sec < 0 || sec >= 60) {
+                        throw new Error('Valores de latitud fuera de rango');
+                    }
+                } else {
+                    const deg = parseFloat(document.getElementById('lon-deg').value);
+                    const min = parseFloat(document.getElementById('lon-min').value);
+                    const sec = parseFloat(document.getElementById('lon-sec').value);
+                    
+                    if (deg < 0 || deg > 180 || min < 0 || min >= 60 || sec < 0 || sec >= 60) {
+                        throw new Error('Valores de longitud fuera de rango');
+                    }
+                }
+                return true;
+            } catch (e) {
+                errorElement.textContent = `Error: ${e.message}`;
+                errorElement.style.display = 'block';
+                return false;
+            }
+        }
+
+        function convertCoordinates() {
+            if (!validateInput('lat', 'lat') || !validateInput('lon', 'lon')) {
+                return;
+            }
+
+            const latDeg = document.getElementById('lat-deg').value;
+            const latMin = document.getElementById('lat-min').value;
+            const latSec = document.getElementById('lat-sec').value;
+            const latDir = document.getElementById('lat-dir').value;
+            
+            const lonDeg = document.getElementById('lon-deg').value;
+            const lonMin = document.getElementById('lon-min').value;
+            const lonSec = document.getElementById('lon-sec').value;
+            const lonDir = document.getElementById('lon-dir').value;
+            
+            const height = parseFloat(document.getElementById('height').value) || 0;
+
+            const latDecimal = gmsToDecimal(latDeg, latMin, latSec, latDir);
+            const lonDecimal = gmsToDecimal(lonDeg, lonMin, lonSec, lonDir);
+
+            // Definir zona UTM y hemisferio
+            const zone = Math.floor((lonDecimal + 180) / 6) + 1;
+            const hemisphere = latDecimal >= 0 ? 'N' : 'S';
+
+            // Definir proyecciones con los parámetros correctos para el hemisferio sur
+            const wgs84 = '+proj=longlat +datum=WGS84 +no_defs';
+            const utm = `+proj=utm +zone=${zone} ${hemisphere === 'S' ? '+south' : ''} +datum=WGS84 +units=m +no_defs`;
+            const ecef = '+proj=geocent +datum=WGS84 +units=m +no_defs';
+
+            // Realizar conversiones
+            const utmCoords = proj4(wgs84, utm, [lonDecimal, latDecimal]);
+            const ecefCoords = proj4(wgs84, ecef, [lonDecimal, latDecimal, height]);
+
+            // Ajustar coordenada Norte para hemisferio sur
+            const northing = utmCoords[1];
+            const northingDisplay = hemisphere === 'S' ? northing + 10000000 : northing;
+
+            // Mostrar resultados
+            const results = document.getElementById('results');
+            results.innerHTML = `
+                <h3>Resultados de la Conversión</h3>
+                
+                <div class="result-item">
+                    <h4>Geodésicas (WGS84)</h4>
+                    <p>Latitud: ${Math.abs(latDeg)}° ${latMin}' ${latSec}" ${latDir}</p>
+                    <p>Longitud: ${Math.abs(lonDeg)}° ${lonMin}' ${lonSec}" ${lonDir}</p>
+                    <p>Altura: ${height.toFixed(3)} m</p>
+                </div>
+
+                <div class="result-item">
+                    <h4>Geodésicas Decimales</h4>
+                    <p>Latitud: ${latDecimal.toFixed(8)}°</p>
+                    <p>Longitud: ${lonDecimal.toFixed(8)}°</p>
+                </div>
+
+                <div class="result-item">
+                    <h4>UTM</h4>
+                    <p>Este: ${utmCoords[0].toFixed(4)} m</p>
+                    <p>Norte: ${northingDisplay.toFixed(4)} m</p>
+                    <p>Zona: ${zone}${hemisphere}</p>
+                </div>
+
+                <div class="result-item">
+                    <h4>Geocéntricas (ECEF)</h4>
+                    <p>X: ${ecefCoords[0].toFixed(4)} m</p>
+                    <p>Y: ${ecefCoords[1].toFixed(4)} m</p>
+                    <p>Z: ${ecefCoords[2].toFixed(4)} m</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
